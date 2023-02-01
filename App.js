@@ -13,31 +13,47 @@ import {
 import { theme } from "./color";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Fontisto } from "@expo/vector-icons";
+import { AntDesign } from "@expo/vector-icons";
+import { Foundation } from "@expo/vector-icons";
 
-const STORAGE_KEY = "@toDos";
+const TO_DO_KEY = "@toDos";
+const WORK_KEY = "@work";
 
 export default function App() {
   const [working, setWorking] = useState(true);
   const [text, setText] = useState("");
+  const [modiText, setModiText] = useState("");
   const [toDos, setToDos] = useState({});
   const [loading, setLading] = useState(false);
-  const travel = () => setWorking(false);
-  const work = () => setWorking(true);
-  const onChangeText = (payload) => setText(payload);
 
-  //local storage에 저장 하기
+  const travel = () => {
+    setWorking(false);
+    saveWork(false);
+  };
+  const work = () => {
+    setWorking(true);
+    saveWork(true);
+  };
+  const onChangeText = (payload) => setText(payload);
+  const onChangeModiText = (payload) => setModiText(payload);
+
   const saveToDos = async (toSave) => {
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(toSave)); // JSON.stringify : 오브젝트를 string으로 바꿔준다.
+    await AsyncStorage.setItem(TO_DO_KEY, JSON.stringify(toSave));
   };
 
-  //local storage에서 불러오기
+  const saveWork = async (lastWork) => {
+    await AsyncStorage.setItem(WORK_KEY, JSON.stringify(lastWork));
+  };
+
   const loadToDos = async () => {
     try {
       setLading(true);
-      const s = await AsyncStorage.getItem(STORAGE_KEY);
-      // JSON.parse : string을 자바스크립트 오브젝트로 변환 시켜준다
-      if (s !== null) {
-        setToDos(JSON.parse(s));
+      const loadToDo = await AsyncStorage.getItem(TO_DO_KEY);
+      const loadWork = await AsyncStorage.getItem(WORK_KEY);
+
+      if (loadToDo !== null) {
+        setToDos(JSON.parse(loadToDo));
+        setWorking(JSON.parse(loadWork));
       }
       setLading(false);
     } catch (e) {
@@ -46,27 +62,54 @@ export default function App() {
   };
 
   useEffect(() => {
-    loadToDos(); // Component did Mount일때 loadData 불러오기
+    loadToDos();
   }, []);
 
   const addToDo = async () => {
     if (text === "") {
       return;
     }
-    const newToDos = { ...toDos, [Date.now()]: { text, working } };
+    const newToDos = {
+      ...toDos,
+      [Date.now()]: { text, working, complete: false, modify: false },
+    };
     setToDos(newToDos);
     await saveToDos(newToDos);
     setText("");
   };
 
-  const deleteToDo = (id) => {
+  const modifyToDoText = async (toDo) => {
+    if (modiText === "") {
+      return;
+    }
+    const newToDos = { ...toDos };
+    newToDos[toDo].text = modiText;
+    newToDos[toDo].modify = !newToDos[toDo].modify;
+    setToDos(newToDos);
+    await saveToDos(newToDos);
+    setModiText("");
+  };
+
+  const completedToDo = async (toDo) => {
+    const newToDos = { ...toDos };
+    newToDos[toDo].complete = !newToDos[toDo].complete;
+    setToDos(newToDos);
+    await saveToDos(newToDos);
+  };
+  const modifyToDo = async (toDo) => {
+    const newToDos = { ...toDos };
+    newToDos[toDo].modify = !newToDos[toDo].modify;
+    setToDos(newToDos);
+  };
+
+  const deleteToDo = (toDo) => {
     Alert.alert("Delete To Do?", "Are you sure??", [
       { text: "Cancel" },
       {
         text: "sure",
         onPress: async () => {
           const newToDos = { ...toDos };
-          delete newToDos[id];
+          delete newToDos[toDo];
           setToDos(newToDos);
           await saveToDos(newToDos);
         },
@@ -102,7 +145,7 @@ export default function App() {
         onChangeText={onChangeText}
         returnKeyType="done"
         value={text}
-        placeholder={working ? "Add a To Do" : "Where do you want to go"} //placeholder
+        placeholder={working ? "Add a To Do" : "Where do you want to go"}
         style={styles.input}
       />
       {loading ? (
@@ -118,10 +161,52 @@ export default function App() {
           {Object.keys(toDos).map((toDo) =>
             toDos[toDo].working === working ? (
               <View style={styles.toDo} key={toDo}>
-                <Text style={styles.toDoText}>{toDos[toDo].text}</Text>
-                <TouchableOpacity onPress={() => deleteToDo(toDo)}>
-                  <Fontisto name="trash" size={24} color="black" />
+                <TouchableOpacity onPress={() => completedToDo(toDo)}>
+                  <AntDesign
+                    name={toDos[toDo].complete ? "checksquare" : "checksquareo"}
+                    size={24}
+                    color="black"
+                  />
                 </TouchableOpacity>
+                {toDos[toDo].modify ? (
+                  <TextInput
+                    style={styles.modifyText}
+                    onSubmitEditing={() => modifyToDoText(toDo)}
+                    onChangeText={onChangeModiText}
+                    value={modiText}
+                    placeholder="modify text"
+                  />
+                ) : (
+                  <Text
+                    style={
+                      toDos[toDo].complete
+                        ? styles.toDoComplete
+                        : styles.toDoText
+                    }
+                  >
+                    {toDos[toDo].text}
+                  </Text>
+                )}
+                <View style={{ flexDirection: "row" }}>
+                  <TouchableOpacity
+                    disabled={toDos[toDo].complete}
+                    style={{ marginRight: 15 }}
+                    onPress={() => modifyToDo(toDo)}
+                  >
+                    <Foundation
+                      name="clipboard-pencil"
+                      size={24}
+                      color={toDos[toDo].complete ? "black" : "white"}
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => deleteToDo(toDo)}>
+                    <Fontisto
+                      name="trash"
+                      size={24}
+                      color={toDos[toDo].complete ? "#54211d" : "red"}
+                    />
+                  </TouchableOpacity>
+                </View>
               </View>
             ) : null
           )}
@@ -157,7 +242,7 @@ const styles = StyleSheet.create({
   toDo: {
     backgroundColor: theme.toDoBg,
     marginBottom: 10,
-    paddingVertical: 20,
+    paddingVertical: 25,
     paddingHorizontal: 20,
     borderRadius: 15,
     flexDirection: "row",
@@ -168,10 +253,26 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 16,
     fontWeight: "500",
+    position: "absolute",
+    left: 90,
+  },
+  toDoComplete: {
+    color: "grey",
+    fontSize: 16,
+    fontWeight: "500",
+    textDecorationLine: "line-through",
+    position: "absolute",
+    left: 90,
   },
   loading: {
     height: "100%",
-
     alignItems: "center",
+  },
+  modifyText: {
+    backgroundColor: "white",
+    width: "60%",
+
+    paddingHorizontal: 20,
+    borderRadius: 15,
   },
 });
